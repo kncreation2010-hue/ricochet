@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="fr-CH">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="description" content="Ricochet du Lac : faites rebondir le galet le plus loin possible. Défis du jour, succès et galets à collectionner.">
+<meta name="theme-color" content="#10283A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ricochet">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:title" content="Ricochet du Lac">
+<meta property="og:description" content="Combien de ricochets ferez-vous ? Jeu gratuit, une seule touche.">
+<meta property="og:image" content="icon-512.png">
+<title>Ricochet du Lac</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800&display=swap">
+<style>
+/* Layout: jeu plein écran sur canvas ; HUD et panneaux HTML par-dessus, alignés sur les zones sûres du téléphone. Univers visuel unique (lac au crépuscule), pas de thème sombre séparé. */
+:root{
+  --ink:#10283A;
+  --cream:#FFF7EA;
+  --gold:#F4B63A;
+  --gold-deep:#B9781B;
+  --lake:#2C7FA3;
+  --coral:#EF6A4C;
+  --mint:#4FCB98;
+  --shade:rgba(9,26,40,.62);
+  --line:rgba(16,40,58,.14);
+  --f-display:"Lilita One", "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif;
+  --f-body:"Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme:light;
+}
+html,body{height:100%}
+[hidden]{display:none!important}
+body{margin:0;background:var(--ink);color:var(--cream);font-family:var(--f-body);overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+#game{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+button{font:inherit;cursor:pointer;touch-action:manipulation}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+
+/* HUD */
+#hud{position:fixed;top:0;left:0;right:0;display:grid;grid-template-columns:1fr auto 1fr;align-items:start;gap:8px;padding-top:calc(env(safe-area-inset-top, 0px) + 10px);padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));pointer-events:none;z-index:5}
+#hud > *{pointer-events:auto}
+.coins{display:inline-flex;align-items:center;gap:8px;background:rgba(16,40,58,.55);border-radius:999px;padding:6px 12px 6px 6px;font-weight:800;font-variant-numeric:tabular-nums;justify-self:start}
+.coin{width:22px;height:22px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #FFE7A3 0 22%, var(--gold) 48%, var(--gold-deep) 100%);box-shadow:inset 0 0 0 2px rgba(185,120,27,.6);flex:none}
+#score{font-family:var(--f-display);font-size:clamp(3rem, 14vw, 4.5rem);line-height:1;color:var(--cream);text-shadow:0 3px 0 rgba(16,40,58,.35);text-align:center;font-variant-numeric:tabular-nums}
+#score small{display:block;font-family:var(--f-body);font-size:.8rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.85;text-shadow:none}
+.hud-right{grid-column:3;justify-self:end;display:flex;gap:8px}
+#score{grid-column:2}
+.coins{grid-column:1}
+.icon-btn{width:40px;height:40px;border-radius:50%;border:0;background:rgba(16,40,58,.55);color:var(--cream);display:grid;place-items:center}
+.icon-btn svg{width:20px;height:20px}
+
+/* Panneaux */
+.panel{position:fixed;inset:0;z-index:10;display:grid;place-items:center;background:var(--shade);padding-top:calc(env(safe-area-inset-top, 0px) + 16px);padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 16px);padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+.panel.soft{background:linear-gradient(180deg, rgba(9,26,40,0) 0%, rgba(9,26,40,.55) 100%)}
+.card{width:min(100%, 390px);max-height:100%;overflow:auto;background:var(--cream);color:var(--ink);border-radius:24px;padding:22px;display:grid;gap:14px;box-shadow:0 18px 50px -18px rgba(0,0,0,.6);touch-action:pan-y}
+.card h1,.card h2{font-family:var(--f-display);font-weight:400;margin:0;line-height:1.05;letter-spacing:.01em;text-wrap:balance}
+.card h1{font-size:2.6rem;color:var(--lake)}
+.card h2{font-size:2.1rem}
+.card p{margin:0;line-height:1.45}
+.muted{color:#4F6676;font-size:.92rem}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.stat b{display:block;font-family:var(--f-display);font-weight:400;font-size:1.7rem;line-height:1.1;font-variant-numeric:tabular-nums}
+.stat span{font-size:.8rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#4F6676}
+.btns{display:grid;gap:10px}
+.btn{border:0;border-radius:16px;padding:15px 18px;font-weight:800;font-size:1.05rem;min-height:52px;display:flex;align-items:center;justify-content:center;gap:10px}
+.btn.primary{background:var(--coral);color:#fff;box-shadow:0 4px 0 #B8452D}
+.btn.primary:active{transform:translateY(3px);box-shadow:0 1px 0 #B8452D}
+.btn.secondary{background:#fff;color:var(--ink);border:2px solid var(--line)}
+.btn.gold{background:var(--gold);color:var(--ink);box-shadow:0 4px 0 var(--gold-deep)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.badge{justify-self:start;background:var(--mint);color:var(--ink);font-weight:800;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;padding:4px 10px;border-radius:999px}
+.demo{font-size:.78rem;color:#4F6676;text-align:center}
+
+/* Boutique */
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:#EADFCB;border-radius:14px;padding:4px}
+.tab{border:0;background:transparent;color:var(--ink);font-weight:800;padding:10px 4px;border-radius:10px;font-size:.92rem}
+.tab[aria-selected="true"]{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.items{display:grid;gap:10px}
+.item{display:grid;grid-template-columns:56px 1fr auto;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:16px;padding:10px 12px}
+.swatch{width:56px;height:56px;border-radius:14px;display:grid;place-items:center;overflow:hidden}
+.swatch i{display:block;width:40px;height:22px;border-radius:50%;box-shadow:0 3px 0 rgba(0,0,0,.18)}
+.item-name{font-weight:800;min-width:0}
+.item-sub{font-size:.82rem;color:#4F6676}
+.buy{border:0;border-radius:12px;padding:10px 12px;font-weight:800;min-width:92px;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--gold);color:var(--ink)}
+.buy .coin{width:16px;height:16px}
+.buy.equip{background:var(--lake);color:#fff}
+.buy.on{background:var(--mint);color:var(--ink)}
+.buy.cash{background:var(--coral);color:#fff}
+.prog{height:8px;border-radius:999px;background:#EADFCB;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--mint);border-radius:999px}
+.quest{display:grid;grid-template-columns:44px 1fr;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:16px;padding:10px 12px}
+.quest.done{background:#EAF8F1;border-color:rgba(79,203,152,.5)}
+.medal{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-family:var(--f-display);font-size:1.1rem;color:var(--ink);background:#EADFCB}
+.quest.done .medal{background:var(--mint)}
+.medal i{display:block;width:30px;height:16px;border-radius:50%}
+.q-body{display:grid;gap:5px;min-width:0}
+.q-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.q-name{font-weight:800}
+.q-reward{font-size:.8rem;font-weight:800;color:var(--gold-deep);white-space:nowrap}
+.q-desc{font-size:.84rem;color:#4F6676}
+.q-num{font-size:.78rem;color:#4F6676;font-variant-numeric:tabular-nums}
+.section-label{font-size:.8rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#4F6676;margin-top:4px}
+.pill-count{display:inline-block;min-width:22px;padding:0 6px;border-radius:999px;background:var(--coral);color:#fff;font-size:.8rem;line-height:22px;text-align:center}
+.buy.lock{background:#EADFCB;color:#4F6676}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom, 0px) + 22px);transform:translateX(-50%);z-index:20;background:var(--ink);color:var(--cream);padding:12px 16px;border-radius:14px;font-weight:800;max-width:calc(100% - 32px);text-align:center;box-shadow:0 10px 30px -10px rgba(0,0,0,.6)}
+@media (prefers-reduced-motion:no-preference){
+  .card{animation:pop .28s ease-out both}
+  @keyframes pop{from{transform:scale(.96)}to{transform:none}}
+}
+</style>
+<style>:root{padding-top:0;padding-bottom:0}body{margin:0}img{max-width:100%}</style>
+</head>
+<body>
+<canvas id="game" aria-label="Lac avec un galet qui ricoche"></canvas>
+
+<div id="hud">
+  <div class="coins" aria-label="Pièces"><span class="coin" aria-hidden="true"></span><span id="coins">0</span></div>
+  <div id="score" hidden>0<small>ricochets</small></div>
+  <div class="hud-right">
+    <button class="icon-btn" id="mute" aria-label="Couper le son">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path id="wave" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg>
+    </button>
+  </div>
+</div>
+
+<section class="panel soft" id="menu">
+  <div class="card">
+    <h1>Ricochet du Lac</h1>
+    <p>Lancez le galet, puis touchez l'écran juste avant qu'il touche l'eau. Plus vous êtes précis, plus il va loin.</p>
+    <div class="stats">
+      <div class="stat"><b id="m-best">0</b><span>Record</span></div>
+      <div class="stat"><b id="m-coins">0</b><span>Pièces</span></div>
+    </div>
+    <div class="btns">
+      <button class="btn primary" id="play">Jouer</button>
+      <button class="btn secondary" id="open-quests">Défis et succès <span class="pill-count" id="m-quests" hidden>0</span></button>
+      <button class="btn secondary" id="open-shop">Boutique</button>
+    </div>
+    <p class="demo">Version bêta gratuite · ajoutez le jeu à votre écran d'accueil pour jouer en plein écran.</p>
+  </div>
+</section>
+
+<section class="panel" id="over" hidden>
+  <div class="card">
+    <span class="badge" id="record" hidden>Nouveau record</span>
+    <h2 id="over-title">Plouf !</h2>
+    <div class="stats">
+      <div class="stat"><b id="o-skips">0</b><span>Ricochets</span></div>
+      <div class="stat"><b id="o-perfect">0</b><span>Parfaits</span></div>
+      <div class="stat"><b id="o-dist">0 m</b><span>Distance</span></div>
+      <div class="stat"><b id="o-coins">+0</b><span>Pièces</span></div>
+    </div>
+    <div class="btns">
+      <button class="btn gold" id="revive-coins"><span class="coin" aria-hidden="true"></span>Continuer pour 100 pièces</button>
+      <button class="btn secondary" id="revive-ad">Continuer gratuitement (bêta)</button>
+      <button class="btn primary" id="again">Rejouer</button>
+      <button class="btn secondary" id="over-quests">Défis et succès</button>
+      <button class="btn secondary" id="over-shop">Boutique</button>
+    </div>
+  </div>
+</section>
+
+<section class="panel" id="shop" hidden>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+      <h2>Boutique</h2>
+      <div class="coins" style="background:#EADFCB;color:var(--ink)"><span class="coin" aria-hidden="true"></span><span id="s-coins">0</span></div>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-stones" aria-selected="true">Galets</button>
+      <button class="tab" role="tab" id="tab-lakes" aria-selected="false">Lacs</button>
+      <button class="tab" role="tab" id="tab-packs" aria-selected="false">Pièces</button>
+    </div>
+    <div class="items" id="items"></div>
+    <button class="btn secondary" id="close-shop">Retour</button>
+    <p class="demo">Les packs de pièces arriveront avec la version complète. Tout le reste se gagne en jouant.</p>
+  </div>
+</section>
+
+<section class="panel" id="quests" hidden>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+      <h2>Défis</h2>
+      <div class="coins" style="background:#EADFCB;color:var(--ink)"><span class="coin" aria-hidden="true"></span><span id="q-coins">0</span></div>
+    </div>
+    <p class="section-label">Défis du jour <span id="q-reset" style="text-transform:none;letter-spacing:0;font-weight:600"></span></p>
+    <div class="items" id="daily"></div>
+    <p class="section-label">Succès <span id="q-count" style="text-transform:none;letter-spacing:0;font-weight:600"></span></p>
+    <div class="items" id="achs"></div>
+    <button class="btn secondary" id="close-quests">Retour</button>
+  </div>
+</section>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(function(){
+  // ---------- Données ----------
+  var STONES = [
+    { id:'galet',  name:'Galet du Léman', sub:'Lisse et fiable',      price:0,    c:['#C9C2B6','#8C857A'], speck:'#6E675C' },
+    { id:'ardoise',name:'Ardoise',        sub:'Plate comme il faut',  price:200,  c:['#7C8C99','#3E4B56'], speck:'#2B353D' },
+    { id:'granit', name:'Granit rose',    sub:'Du fond des Alpes',    price:450,  c:['#E5B3A6','#A46A5E'], speck:'#6B3F37' },
+    { id:'quartz', name:'Quartz',         sub:'Brille au soleil',     price:900,  c:['#F2F6FF','#A9B9E0'], speck:'#FFFFFF' },
+    { id:'lune',   name:'Pierre de lune', sub:'Laisse une traînée',   price:1600, c:['#DCD6FF','#7A6CD6'], speck:'#F4F1FF', trail:true },
+    { id:'or',     name:'Pépite',         sub:'Pack Fondateur',       price:-1,   c:['#FFE39A','#C98A1E'], speck:'#FFF6D6', trail:true },
+    { id:'silex',  name:'Silex',          sub:'Succès « Dix d\u2019un coup »', price:-2, ach:'a_10',    c:['#D9CBB2','#7A6648'], speck:'#4E402B' },
+    { id:'coquille',name:'Coquillage',    sub:'Succès « Métronome »',  price:-2, ach:'a_combo10', c:['#FFE3E0','#E79A9A'], speck:'#FFFFFF' },
+    { id:'glacier',name:'Glacier',        sub:'Succès « Vingt sur le lac »', price:-2, ach:'a_20', c:['#E6FBFF','#7FC8DD'], speck:'#FFFFFF', trail:true },
+    { id:'obsidienne',name:'Obsidienne',  sub:'Succès « Perfectionniste »', price:-2, ach:'a_perf100', c:['#5B5F73','#0E1018'], speck:'#9AA3C7' },
+    { id:'meteor', name:'Météorite',      sub:'Succès « Légende du lac »', price:-2, ach:'a_35', c:['#FFB37A','#7A2E1A'], speck:'#FFE1A8', trail:true },
+    { id:'arcenciel',name:'Arc-en-ciel',  sub:'Succès « Maître du lac »', price:-2, ach:'a_all', c:['#FFD1F0','#7EC8FF'], speck:'#FFF59E', trail:true }
+  ];
+
+  // Succès permanents. type : run (meilleure valeur d'une partie), total (cumul), special.
+  var ACHS = [
+    { id:'a_1',       name:'Premier rebond',     desc:'Faire 1 ricochet',                       type:'run',   key:'skips',   n:1,    coins:20 },
+    { id:'a_5',       name:'Échauffement',       desc:'Faire 5 ricochets en une partie',        type:'run',   key:'skips',   n:5,    coins:50 },
+    { id:'a_10',      name:'Dix d\u2019un coup',   desc:'Faire 10 ricochets en une partie',       type:'run',   key:'skips',   n:10,   stone:'silex' },
+    { id:'a_20',      name:'Vingt sur le lac',   desc:'Faire 20 ricochets en une partie',       type:'run',   key:'skips',   n:20,   stone:'glacier' },
+    { id:'a_35',      name:'Légende du lac',     desc:'Faire 35 ricochets en une partie',       type:'run',   key:'skips',   n:35,   stone:'meteor' },
+    { id:'a_combo3',  name:'Œil de lynx',        desc:'Enchaîner 3 parfaits',                   type:'run',   key:'combo',   n:3,    coins:50 },
+    { id:'a_combo10', name:'Métronome',          desc:'Enchaîner 10 parfaits',                  type:'run',   key:'combo',   n:10,   stone:'coquille' },
+    { id:'a_clean',   name:'Sans faute',         desc:'Faire 10 ricochets sans aucun raté',     type:'run',   key:'clean',   n:10,   coins:150 },
+    { id:'a_dist300', name:'Traversée',          desc:'Parcourir 300 m en une partie',          type:'run',   key:'dist',    n:300,  coins:150 },
+    { id:'a_throw',   name:'Bras d\u2019or',       desc:'Lancer avec la jauge presque pleine',    type:'run',   key:'power',   n:95,   coins:30 },
+    { id:'a_runs10',  name:'Habitué',            desc:'Jouer 10 parties',                       type:'total', key:'runs',    n:10,   coins:100 },
+    { id:'a_runs50',  name:'Assidu',             desc:'Jouer 50 parties',                       type:'total', key:'runs',    n:50,   coins:300 },
+    { id:'a_perf100', name:'Perfectionniste',    desc:'Réussir 100 parfaits au total',          type:'total', key:'perfects',n:100,  stone:'obsidienne' },
+    { id:'a_skips1k', name:'Mille rebonds',      desc:'Faire 1 000 ricochets au total',         type:'total', key:'skips',   n:1000, coins:500 },
+    { id:'a_dist2k',  name:'Marathonien',        desc:'Parcourir 2 000 m au total',             type:'total', key:'dist',    n:2000, coins:250 },
+    { id:'a_collect', name:'Collectionneur',     desc:'Posséder 5 galets',                      type:'special', key:'stones', n:5,   coins:200 },
+    { id:'a_lakes',   name:'Explorateur',        desc:'Jouer sur les 3 lacs',                   type:'special', key:'lakes',  n:3,   coins:200 },
+    { id:'a_all',     name:'Maître du lac',      desc:'Débloquer tous les autres succès',       type:'special', key:'achs',   n:17,  stone:'arcenciel' }
+  ];
+
+  // Modèles de défis du jour (3 tirés au hasard chaque jour, identiques pour tous les joueurs).
+  var DAILY = [
+    { id:'d_skips', text:'Faire {n} ricochets en une partie', type:'run', key:'skips',    ns:[8,12,16] },
+    { id:'d_combo', text:'Enchaîner {n} parfaits',            type:'run', key:'combo',    ns:[4,6,8] },
+    { id:'d_perf',  text:'Réussir {n} parfaits aujourd\u2019hui', type:'sum', key:'perfects', ns:[10,20,30] },
+    { id:'d_runs',  text:'Jouer {n} parties aujourd\u2019hui',    type:'sum', key:'runs',     ns:[3,5,8] },
+    { id:'d_dist',  text:'Parcourir {n} m aujourd\u2019hui',      type:'sum', key:'dist',     ns:[300,600,1000] }
+  ];
+  var DAILY_COINS = [60, 100, 160];
+  var LAKES = [
+    { id:'leman', name:'Léman au crépuscule', sub:'Le classique', price:0,
+      sky:['#F9B98B','#F6D6B0'], sun:'#FFF1C9', m1:'#7C6F8F', m2:'#4F587A', w:['#4F8DB0','#1E4E6E'], shine:'rgba(255,230,190,.55)' },
+    { id:'alpin', name:'Lac alpin', sub:'Eau turquoise', price:800,
+      sky:['#9FD3F0','#E3F4FB'], sun:'#FFFFFF', m1:'#9AB0BF', m2:'#5D7584', w:['#3FC1C0','#11707A'], shine:'rgba(255,255,255,.55)' },
+    { id:'nuit',  name:'Nuit étoilée', sub:'Pour les records', price:1500,
+      sky:['#1B2550','#3A3F78'], sun:'#E9EEFF', m1:'#2C3466', m2:'#1A2048', w:['#24366E','#0B1434'], shine:'rgba(200,215,255,.35)' }
+  ];
+  var PACKS = [
+    { id:'p1', name:'Poignée de pièces', sub:'1 000 pièces', price:'1.00 CHF', coins:1000 },
+    { id:'p2', name:'Sac de pièces',     sub:'6 000 pièces (+20 %)', price:'5.00 CHF', coins:6000 },
+    { id:'pro',name:'Pack Fondateur',    sub:'Pièces x2 à vie, sans pubs, galet Pépite', price:'3.00 CHF', pro:true }
+  ];
+
+  // ---------- Sauvegarde locale ----------
+  var KEY = 'ricochet-du-lac-v1';
+  function defaults(){ return { coins:0, best:0, owned:{ galet:true, leman:true }, stone:'galet', lake:'leman', pro:false, muted:false,
+    stats:{ runs:0, skips:0, perfects:0, dist:0, lakes:{} }, best2:{ skips:0, combo:0, clean:0, dist:0, power:0 }, ach:{}, daily:null }; }
+  var S = defaults();
+  try { var raw = localStorage.getItem(KEY); if (raw) { var d = JSON.parse(raw); S = Object.assign(defaults(), d); S.owned = Object.assign({ galet:true, leman:true }, d.owned || {}); S.stats = Object.assign(defaults().stats, d.stats || {}); S.best2 = Object.assign(defaults().best2, d.best2 || {}); S.ach = d.ach || {}; } } catch(e) {}
+  function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
+  function stoneDef(){ return STONES.find(function(s){ return s.id === S.stone; }) || STONES[0]; }
+  function lakeDef(){ return LAKES.find(function(l){ return l.id === S.lake; }) || LAKES[0]; }
+
+  // ---------- Succès et défis ----------
+  function todayKey(){ var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+  function seeded(str){ var h = 2166136261; for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return function(){ h = Math.imul(h ^ (h >>> 15), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); h ^= h >>> 16; return (h >>> 0) / 4294967296; }; }
+  function ensureDaily(){
+    var key = todayKey();
+    if (S.daily && S.daily.date === key) return;
+    var rnd = seeded('ricochet-' + key), pool = DAILY.slice(), picks = [];
+    for (var i = 0; i < 3; i++) { var k = Math.floor(rnd() * pool.length); var tpl = pool.splice(k, 1)[0]; picks.push({ id: tpl.id, lvl: i }); }
+    S.daily = { date:key, picks:picks, sum:{ perfects:0, runs:0, dist:0 }, max:{ skips:0, combo:0 }, done:{} };
+    save();
+  }
+  function dailyTpl(id){ return DAILY.find(function(d){ return d.id === id; }); }
+  function dailyProgress(pk){ var tpl = dailyTpl(pk.id), goal = tpl.ns[pk.lvl], v = tpl.type === 'sum' ? S.daily.sum[tpl.key] : S.daily.max[tpl.key]; return { goal:goal, v:Math.min(goal, Math.floor(v || 0)), text:tpl.text.replace('{n}', goal.toLocaleString('fr-CH')) }; }
+  function achValue(a){
+    if (a.type === 'run') return S.best2[a.key] || 0;
+    if (a.type === 'total') return S.stats[a.key] || 0;
+    if (a.key === 'stones') return STONES.filter(function(st){ return S.owned[st.id]; }).length;
+    if (a.key === 'lakes') return Object.keys(S.stats.lakes || {}).length;
+    if (a.key === 'achs') return ACHS.filter(function(x){ return x.id !== 'a_all' && S.ach[x.id]; }).length;
+    return 0;
+  }
+  function rewardText(r){ if (r.stone) { var st = STONES.find(function(x){ return x.id === r.stone; }); return 'Galet ' + st.name; } return '+' + r.coins + ' pièces'; }
+  function checkAll(){
+    ensureDaily();
+    var changed = false;
+    for (var pass = 0; pass < 2; pass++) {
+      ACHS.forEach(function(a){
+        if (S.ach[a.id] || achValue(a) < a.n) return;
+        S.ach[a.id] = true; changed = true;
+        if (a.stone) S.owned[a.stone] = true; else S.coins += a.coins;
+        toast('Succès débloqué : ' + a.name + ' · ' + rewardText(a), true);
+        beep(1040, 0.22, 'sine', 0.18);
+      });
+    }
+    S.daily.picks.forEach(function(pk, i){
+      var pr = dailyProgress(pk);
+      if (S.daily.done[pk.id] || pr.v < pr.goal) return;
+      S.daily.done[pk.id] = true; changed = true; S.coins += DAILY_COINS[pk.lvl];
+      toast('Défi du jour réussi · +' + DAILY_COINS[pk.lvl] + ' pièces', true);
+    });
+    if (changed) { save(); updateHud(); }
+  }
+  function recordRun(key, v){ if (v > (S.best2[key] || 0)) S.best2[key] = v; if (S.daily && S.daily.max[key] !== undefined && v > S.daily.max[key]) S.daily.max[key] = v; }
+  function pendingCount(){ ensureDaily(); return S.daily.picks.filter(function(pk){ return !S.daily.done[pk.id]; }).length; }
+
+  // ---------- Son ----------
+  var actx = null;
+  function audio(){ if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { actx = null; } } if (actx && actx.state === 'suspended') actx.resume(); }
+  function beep(freq, dur, type, vol){
+    if (S.muted || !actx) return;
+    try {
+      var o = actx.createOscillator(), g = actx.createGain(), now = actx.currentTime;
+      o.type = type || 'sine'; o.frequency.setValueAtTime(freq, now); o.frequency.exponentialRampToValueAtTime(freq * 0.55, now + dur);
+      g.gain.setValueAtTime(vol || 0.18, now); g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      o.connect(g); g.connect(actx.destination); o.start(now); o.stop(now + dur + 0.02);
+    } catch(e) {}
+  }
+
+  // ---------- Canvas ----------
+  var cv = document.getElementById('game'), ctx = cv.getContext('2d');
+  var W = 0, H = 0, DPR = 1, WY = 0;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    WY = H * 0.6;
+  }
+  window.addEventListener('resize', resize); resize();
+
+  // ---------- Règles du jeu ----------
+  // Unités relatives à la hauteur d'écran pour que le jeu se joue pareil sur tous les téléphones.
+  var G = 2.4;            // gravité (H / s²)
+  var VY_MIN = 0.34;      // sous cette énergie, le galet coule
+  var PERFECT = 0.075, GOOD = 0.17; // fenêtres de timing (s) avant le contact
+  var STONE_X = 0.3;      // position du galet à l'écran (part de la largeur)
+
+  var mode = 'menu';      // menu | aim | fly | sink | over
+  var t = 0, last = 0;
+  var run, ripples = [], drops = [], pops = [], trail = [];
+
+  function newRun(){
+    run = { cam:0, vx:0, vy:0, h:0.2, tLaunch:0, tContact:0, grade:0, early:false,
+            skips:0, perfect:0, combo:0, maxCombo:0, misses:0, coins:0, revived:false, spin:0, sinkT:0, power:0, counted:{ skips:0, perfect:0, dist:0, run:false } };
+  }
+  newRun();
+
+  function flightTime(vy, h0){ return (vy + Math.sqrt(vy*vy + 2*G*h0)) / G; }
+  function heightAt(tau){ return run.h0 + run.vy*tau - 0.5*G*tau*tau; }
+
+  function launch(vy, h0){
+    run.vy = vy; run.h0 = h0; run.tLaunch = t;
+    run.tContact = t + flightTime(vy, h0);
+    run.grade = 0; run.early = false;
+  }
+
+  function throwStone(){
+    var p = run.power;
+    run.vx = 0.55 + 0.35 * p;                 // vitesse horizontale (H / s)
+    run.firstVy = 0.95 + 0.6 * p;             // énergie du premier rebond
+    launch(0, 0.22);                          // le galet part de la main et descend vers l'eau
+    mode = 'fly';
+    beep(320, 0.12, 'triangle', 0.12);
+    recordRun('power', Math.round(p * 100)); checkAll();
+  }
+
+  function windows(){
+    var flight = run.tContact - run.tLaunch;
+    return { p: Math.min(PERFECT, flight * 0.28), g: Math.min(GOOD, flight * 0.55) };
+  }
+
+  function tap(){
+    audio();
+    if (mode === 'aim') { throwStone(); return; }
+    if (mode !== 'fly') return;
+    var dt = run.tContact - t, w = windows();
+    if (dt <= w.p) run.grade = Math.max(run.grade, 2);
+    else if (dt <= w.g) run.grade = Math.max(run.grade, 1);
+    else if (!run.early) { run.early = true; pop('Trop tôt', '#EF6A4C'); }
+  }
+
+  function contact(){
+    var grade = run.early ? Math.min(run.grade, 1) : run.grade;
+    var vy = run.skips === 0 ? run.firstVy : run.vy;
+    var mult = S.pro ? 2 : 1, gain = 0;
+    var wx = run.cam + W * STONE_X;
+    if (grade === 2) {
+      run.combo++; run.perfect++;
+      vy *= run.skips === 0 ? 1 : 0.965;
+      gain = (2 + Math.floor(run.combo / 5)) * mult;
+      pop(run.combo > 2 ? 'Parfait x' + run.combo : 'Parfait !', '#4FCB98');
+      beep(620 + Math.min(run.combo, 12) * 40, 0.14, 'sine', 0.2);
+      splash(wx, 10);
+    } else if (grade === 1) {
+      run.combo = 0;
+      vy *= run.skips === 0 ? 0.9 : 0.86;
+      gain = 1 * mult;
+      pop('Bien', '#FFF7EA');
+      beep(460, 0.12, 'sine', 0.16);
+      splash(wx, 6);
+    } else {
+      run.combo = 0;
+      vy *= run.skips === 0 ? 0.75 : 0.6;
+      pop('Raté', '#EF6A4C');
+      beep(200, 0.16, 'triangle', 0.16);
+      splash(wx, 14);
+    }
+    if (grade === 0) run.misses++;
+    run.skips++; run.coins += gain;
+    run.maxCombo = Math.max(run.maxCombo, run.combo);
+    recordRun('skips', run.skips); recordRun('combo', run.maxCombo);
+    if (run.misses === 0) recordRun('clean', run.skips);
+    recordRun('dist', Math.round(run.cam / (H * 0.05)));
+    checkAll();
+    ripples.push({ x: wx, t0: t, big: grade === 0 });
+    run.vx = Math.max(0.25, run.vx * (grade === 2 ? 0.995 : grade === 1 ? 0.97 : 0.9));
+    if (vy < VY_MIN) { sink(); return; }
+    launch(vy, 0);
+    updateHud();
+  }
+
+  function sink(){
+    mode = 'sink'; run.sinkT = t;
+    beep(140, 0.35, 'sine', 0.2);
+    updateHud();
+  }
+
+  function finish(){
+    mode = 'over';
+    var isRecord = run.skips > S.best;
+    if (isRecord) S.best = run.skips;
+    S.coins += run.coins; run.coinsBanked = (run.coinsBanked || 0) + run.coins; run.coins = 0;
+    var meters = Math.round(run.cam / (H * 0.05)), c = run.counted;
+    var dS = run.skips - c.skips, dP = run.perfect - c.perfect, dD = meters - c.dist;
+    ensureDaily();
+    S.stats.skips += dS; S.stats.perfects += dP; S.stats.dist += dD;
+    S.daily.sum.perfects += dP; S.daily.sum.dist += dD;
+    if (!c.run) { S.stats.runs++; S.daily.sum.runs++; c.run = true; }
+    c.skips = run.skips; c.perfect = run.perfect; c.dist = meters;
+    save(); checkAll();
+    el('record').hidden = !isRecord;
+    el('over-title').textContent = run.skips >= 20 ? 'Magnifique !' : run.skips >= 10 ? 'Joli lancer !' : 'Plouf !';
+    el('o-skips').textContent = run.skips;
+    el('o-perfect').textContent = run.perfect;
+    el('o-dist').textContent = Math.round(run.cam / (H * 0.05)) + ' m';
+    el('o-coins').textContent = '+' + run.coinsBanked;
+    el('revive-coins').disabled = run.revived || S.coins < 100;
+    el('revive-ad').hidden = run.revived || S.pro;
+    el('revive-coins').hidden = run.revived;
+    show('over'); updateHud();
+  }
+
+  function revive(useCoins){
+    if (run.revived) return;
+    if (useCoins) { if (S.coins < 100) return; S.coins -= 100; save(); }
+    run.revived = true; run.combo = 0;
+    hideAll(); mode = 'fly';
+    launch(0.95, 0);
+    toast(useCoins ? 'Reparti pour 100 pièces' : 'Reparti, offert pendant la bêta');
+    updateHud();
+  }
+
+  // ---------- Effets ----------
+  function pop(text, color){ pops.push({ text:text, color:color, t0:t }); }
+  function splash(wx, n){ for (var i = 0; i < n; i++) drops.push({ x:wx, y:0, vx:(Math.random()*2-1)*0.25, vy:0.35+Math.random()*0.5, t0:t }); }
+
+  // ---------- Boucle ----------
+  function frame(ms){
+    var now = ms / 1000, dt = Math.min(0.05, now - (last || now)); last = now; t += dt;
+    update(dt); draw(); requestAnimationFrame(frame);
+  }
+  function update(dt){
+    if (mode === 'aim') run.power = 0.5 - 0.5 * Math.cos(t * 2.8);
+    if (mode === 'fly' || mode === 'sink') { run.cam += run.vx * H * dt * (mode === 'sink' ? Math.max(0, 1 - (t - run.sinkT) * 2) : 1); run.spin += dt * (6 + run.vx * 10); }
+    if (mode === 'menu' || mode === 'over') run.cam += H * 0.04 * dt;
+    if (mode === 'fly') { if (t >= run.tContact) contact(); }
+    if (mode === 'sink' && t - run.sinkT > 0.9) finish();
+    ripples = ripples.filter(function(r){ return t - r.t0 < 1.6; });
+    drops = drops.filter(function(d){ return t - d.t0 < 0.8; });
+    pops = pops.filter(function(p){ return t - p.t0 < 0.9; });
+  }
+
+  function mountains(color, base, amp, par, seed){
+    ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0, WY);
+    var off = run.cam * par;
+    for (var x = 0; x <= W + 8; x += 8) {
+      var u = (x + off) / H;
+      var y = Math.sin(u * 3.1 + seed) * 0.5 + Math.sin(u * 7.3 + seed * 2) * 0.22 + Math.sin(u * 1.3 + seed * 3) * 0.6;
+      ctx.lineTo(x, WY - H * (base + amp * (y + 1.3) / 2.6));
+    }
+    ctx.lineTo(W, WY); ctx.closePath(); ctx.fill();
+  }
+
+  function draw(){
+    var L = lakeDef(), st = stoneDef();
+    // Ciel
+    var sky = ctx.createLinearGradient(0, 0, 0, WY); sky.addColorStop(0, L.sky[0]); sky.addColorStop(1, L.sky[1]);
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, WY);
+    if (L.id === 'nuit') { ctx.fillStyle = 'rgba(255,255,255,.8)'; for (var i = 0; i < 60; i++) { var sx = ((i * 97.3 - run.cam * 0.01) % W + W) % W, sy = (i * 53.7) % (WY * 0.7); ctx.fillRect(sx, sy, 1.5, 1.5); } }
+    ctx.fillStyle = L.sun; ctx.beginPath(); ctx.arc(W * 0.72, WY - H * 0.22, H * 0.06, 0, Math.PI * 2); ctx.fill();
+    mountains(L.m1, 0.08, 0.16, 0.05, 1.7);
+    mountains(L.m2, 0.03, 0.09, 0.12, 4.2);
+    // Eau
+    var wg = ctx.createLinearGradient(0, WY, 0, H); wg.addColorStop(0, L.w[0]); wg.addColorStop(1, L.w[1]);
+    ctx.fillStyle = wg; ctx.fillRect(0, WY, W, H - WY);
+    ctx.strokeStyle = L.shine; ctx.lineWidth = 2;
+    for (var k = 0; k < 14; k++) {
+      var yy = WY + 6 + k * k * 2.2, spd = 0.2 + k * 0.08, len = 18 + k * 6, gap = 90 + k * 14;
+      var ox = -((run.cam * spd + k * 37) % gap);
+      ctx.globalAlpha = Math.max(0, 0.9 - k * 0.06);
+      ctx.beginPath();
+      for (var x2 = ox; x2 < W; x2 += gap) { ctx.moveTo(x2, yy); ctx.lineTo(x2 + len, yy); }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    // Reflet du soleil
+    ctx.fillStyle = L.shine; ctx.globalAlpha = .35;
+    for (var r2 = 0; r2 < 6; r2++) ctx.fillRect(W * 0.72 - (30 - r2 * 4), WY + 8 + r2 * 10, (30 - r2 * 4) * 2, 3);
+    ctx.globalAlpha = 1;
+
+    // Ondes
+    ripples.forEach(function(r){
+      var age = t - r.t0, sx = r.x - run.cam, rx = (r.big ? 16 : 10) + age * H * 0.12;
+      ctx.strokeStyle = 'rgba(255,255,255,' + Math.max(0, 0.75 - age * 0.47) + ')'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(sx, WY + 2, rx, rx * 0.2, 0, 0, Math.PI * 2); ctx.stroke();
+      if (age > 0.18) { var rx2 = rx * 0.6; ctx.beginPath(); ctx.ellipse(sx, WY + 2, rx2, rx2 * 0.2, 0, 0, Math.PI * 2); ctx.stroke(); }
+    });
+    // Gouttes
+    ctx.fillStyle = 'rgba(255,255,255,.9)';
+    drops.forEach(function(d){ var a = t - d.t0, x = d.x - run.cam + d.vx * H * a, y = WY - (d.vy * a - 0.5 * G * a * a) * H; if (y <= WY + 2) { ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill(); } });
+
+    // Galet
+    var R = Math.max(12, H * 0.026), sxs = W * STONE_X;
+    if (mode === 'aim' || mode === 'fly' || mode === 'sink') {
+      var h;
+      if (mode === 'aim') h = 0.22 + Math.sin(t * 3) * 0.006;
+      else if (mode === 'fly') h = Math.max(0, heightAt(t - run.tLaunch));
+      else h = -Math.min(0.08, (t - run.sinkT) * 0.12);
+      var sy = WY - h * H - R * 0.45;
+      if (mode === 'aim') sxs = W * 0.16;
+      // Indicateur de timing : l'ombre et l'anneau se resserrent avant le contact
+      if (mode === 'fly') {
+        var tc = run.tContact - t, shadowW = R * (1.6 - Math.min(1, h * 2.2));
+        ctx.fillStyle = 'rgba(10,30,45,' + (0.18 + Math.max(0, 0.3 - h)) + ')';
+        ctx.beginPath(); ctx.ellipse(sxs, WY + 3, shadowW, shadowW * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+        if (tc < 0.4) {
+          var w = windows(), ringR = R * 1.1 + (tc / 0.4) * R * 2.6;
+          ctx.strokeStyle = tc <= w.p ? '#4FCB98' : tc <= w.g ? '#FFF7EA' : 'rgba(255,247,234,.6)';
+          ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(sxs, WY + 2, ringR, ringR * 0.28, 0, 0, Math.PI * 2); ctx.stroke();
+        }
+      }
+      if (st.trail && mode === 'fly') { trail.push({ x: run.cam + sxs, y: sy, t0: t }); }
+      trail = trail.filter(function(p){ return t - p.t0 < 0.35; });
+      trail.forEach(function(p){ var a = 1 - (t - p.t0) / 0.35; ctx.fillStyle = st.speck; ctx.globalAlpha = a * 0.5; ctx.beginPath(); ctx.arc(p.x - run.cam, p.y, R * 0.45 * a, 0, Math.PI * 2); ctx.fill(); });
+      ctx.globalAlpha = 1;
+      if (mode !== 'sink' || h > -0.05) {
+        ctx.save(); ctx.translate(sxs, sy);
+        var grd = ctx.createRadialGradient(-R * 0.35, -R * 0.25, R * 0.1, 0, 0, R * 1.1);
+        grd.addColorStop(0, st.c[0]); grd.addColorStop(1, st.c[1]);
+        ctx.fillStyle = grd; ctx.beginPath(); ctx.ellipse(0, 0, R, R * 0.52, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = st.speck; ctx.globalAlpha = 0.55; ctx.lineWidth = 2;
+        var sp = Math.cos(run.spin) * R * 0.7;
+        ctx.beginPath(); ctx.moveTo(sp, -R * 0.38); ctx.lineTo(sp * 0.6, R * 0.38); ctx.stroke();
+        ctx.globalAlpha = 1; ctx.restore();
+      }
+      // Jauge de lancer
+      if (mode === 'aim') {
+        var bx = Math.max(16, W * 0.06), bh = H * 0.28, by = WY - bh - H * 0.06, bw = 14;
+        ctx.fillStyle = 'rgba(16,40,58,.5)'; roundRect(bx, by, bw, bh, 7); ctx.fill();
+        var ph = bh * run.power;
+        ctx.fillStyle = run.power > 0.85 ? '#4FCB98' : run.power > 0.5 ? '#F4B63A' : '#EF6A4C';
+        roundRect(bx, by + bh - ph, bw, ph, 7); ctx.fill();
+        ctx.fillStyle = '#10283A'; ctx.font = '800 ' + Math.round(Math.max(15, H * 0.022)) + 'px Nunito, system-ui, sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('Touchez pour lancer', W / 2, WY - H * 0.36);
+        ctx.font = '600 ' + Math.round(Math.max(13, H * 0.017)) + 'px Nunito, system-ui, sans-serif';
+        ctx.fillText('Visez le haut de la jauge', W / 2, WY - H * 0.36 + Math.max(20, H * 0.028));
+      }
+    }
+    // Textes flottants
+    pops.forEach(function(p){
+      var a = (t - p.t0) / 0.9;
+      ctx.globalAlpha = 1 - a; ctx.fillStyle = p.color; ctx.textAlign = 'center';
+      ctx.font = Math.round(Math.max(22, H * 0.036)) + 'px "Lilita One", "Arial Rounded MT Bold", system-ui, sans-serif';
+      ctx.fillText(p.text, W * STONE_X + 10, WY - H * 0.12 - a * H * 0.06);
+    });
+    ctx.globalAlpha = 1;
+  }
+  function roundRect(x, y, w, h, r){ r = Math.min(r, h / 2, w / 2); ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+  // ---------- Interface ----------
+  function el(id){ return document.getElementById(id); }
+  var panels = ['menu', 'over', 'shop', 'quests'];
+  function hideAll(){ panels.forEach(function(p){ el(p).hidden = true; }); }
+  var returnTo = 'menu';
+  function show(id){ hideAll(); el(id).hidden = false; }
+  function updateHud(){
+    el('coins').textContent = S.coins + run.coins;
+    el('score').firstChild.nodeValue = run.skips;
+    el('score').hidden = !(mode === 'fly' || mode === 'sink');
+    el('m-best').textContent = S.best; el('m-coins').textContent = S.coins; el('s-coins').textContent = S.coins; el('q-coins').textContent = S.coins;
+    var pc = pendingCount(); el('m-quests').textContent = pc; el('m-quests').hidden = pc === 0;
+    el('wave').style.display = S.muted ? 'none' : '';
+    el('mute').setAttribute('aria-label', S.muted ? 'Activer le son' : 'Couper le son');
+  }
+  var toastQ = [], toastBusy = false;
+  function toast(msg, queue){
+    if (!queue) { toastQ = []; }
+    toastQ.push(msg); if (!toastBusy || !queue) nextToast();
+  }
+  var toastTimer = null;
+  function nextToast(){
+    var e = el('toast'); clearTimeout(toastTimer);
+    if (!toastQ.length) { e.hidden = true; toastBusy = false; return; }
+    toastBusy = true; e.textContent = toastQ.shift(); e.hidden = false;
+    toastTimer = setTimeout(nextToast, 2300);
+  }
+
+  function startGame(){ audio(); S.stats.lakes[S.lake] = true; save(); checkAll(); newRun(); ripples = []; drops = []; pops = []; trail = []; hideAll(); mode = 'aim'; updateHud(); }
+
+  // Boutique
+  var tab = 'stones';
+  function renderShop(){
+    ['stones','lakes','packs'].forEach(function(k){ el('tab-' + k).setAttribute('aria-selected', k === tab ? 'true' : 'false'); });
+    var box = el('items'); box.innerHTML = '';
+    var list = tab === 'stones' ? STONES : tab === 'lakes' ? LAKES : PACKS;
+    list.forEach(function(it){
+      var row = document.createElement('div'); row.className = 'item';
+      var sw = document.createElement('div'); sw.className = 'swatch';
+      if (tab === 'stones') { sw.style.background = '#EADFCB'; var i = document.createElement('i'); i.style.background = 'radial-gradient(circle at 35% 30%, ' + it.c[0] + ', ' + it.c[1] + ')'; sw.appendChild(i); }
+      else if (tab === 'lakes') { sw.style.background = 'linear-gradient(180deg, ' + it.sky[0] + ' 0 45%, ' + it.m2 + ' 45% 55%, ' + it.w[0] + ' 55% 100%)'; }
+      else { sw.style.background = it.pro ? 'linear-gradient(135deg, #FFE39A, #C98A1E)' : '#EADFCB'; var c = document.createElement('span'); c.className = 'coin'; c.style.width = '30px'; c.style.height = '30px'; sw.appendChild(c); }
+      var txt = document.createElement('div'); txt.style.minWidth = '0';
+      var n = document.createElement('div'); n.className = 'item-name'; n.textContent = it.name;
+      var s = document.createElement('div'); s.className = 'item-sub'; s.textContent = it.sub;
+      txt.appendChild(n); txt.appendChild(s);
+      var b = document.createElement('button'); b.className = 'buy';
+      if (tab === 'packs') {
+        var owned = it.pro && S.pro;
+        b.className = 'buy ' + (owned ? 'on' : 'lock'); b.textContent = owned ? 'Acheté' : 'Bientôt'; b.disabled = owned;
+        b.addEventListener('click', function(){ toast(it.name + ' (' + it.price + ') arrive bientôt'); });
+      } else {
+        var key = tab === 'stones' ? 'stone' : 'lake', has = !!S.owned[it.id], equipped = S[key] === it.id;
+        if (equipped) { b.className = 'buy on'; b.textContent = 'Équipé'; }
+        else if (has) { b.className = 'buy equip'; b.textContent = 'Équiper'; }
+        else if (it.price === -2) { b.className = 'buy lock'; b.textContent = 'Succès'; }
+        else if (it.price < 0) { b.className = 'buy cash'; b.textContent = 'Pack'; }
+        else { var ci = document.createElement('span'); ci.className = 'coin'; b.appendChild(ci); b.appendChild(document.createTextNode(it.price)); if (S.coins < it.price) b.disabled = true; }
+        b.addEventListener('click', function(){ buyItem(it, key); });
+      }
+      row.appendChild(sw); row.appendChild(txt); row.appendChild(b); box.appendChild(row);
+    });
+    el('s-coins').textContent = S.coins;
+  }
+  function buyItem(it, key){
+    if (S.owned[it.id]) { S[key] = it.id; save(); renderShop(); toast(it.name + ' équipé'); return; }
+    if (it.price === -2) { var a = ACHS.find(function(x){ return x.id === it.ach; }); toast('À débloquer : ' + a.desc.charAt(0).toLowerCase() + a.desc.slice(1)); return; }
+    if (it.price < 0) { tab = 'packs'; renderShop(); toast('Disponible avec le Pack Fondateur'); return; }
+    if (S.coins < it.price) { toast('Il vous manque ' + (it.price - S.coins) + ' pièces'); return; }
+    S.coins -= it.price; S.owned[it.id] = true; S[key] = it.id; save(); beep(880, 0.15, 'sine', 0.16); toast(it.name + ' acheté et équipé'); checkAll(); renderShop(); updateHud();
+  }
+  function buyPack(it){
+    if (it.pro) { S.pro = true; S.owned.or = true; S.stone = 'or'; }
+    else S.coins += it.coins;
+    save(); beep(990, 0.18, 'sine', 0.18);
+    toast('Démo : ' + it.name + ' ajouté sans paiement'); checkAll(); renderShop(); updateHud();
+  }
+  function openShop(from){ returnTo = from; renderShop(); show('shop'); }
+
+  function questRow(o){
+    var row = document.createElement('div'); row.className = 'quest' + (o.done ? ' done' : '');
+    var md = document.createElement('div'); md.className = 'medal';
+    if (o.stone) { var st = STONES.find(function(x){ return x.id === o.stone; }); var i = document.createElement('i'); i.style.background = 'radial-gradient(circle at 35% 30%, ' + st.c[0] + ', ' + st.c[1] + ')'; md.appendChild(i); }
+    else md.textContent = o.done ? '\u2713' : '';
+    if (!o.stone && !o.done) { var ci = document.createElement('span'); ci.className = 'coin'; md.appendChild(ci); }
+    var body = document.createElement('div'); body.className = 'q-body';
+    var top = document.createElement('div'); top.className = 'q-top';
+    var nm = document.createElement('span'); nm.className = 'q-name'; nm.textContent = o.name;
+    var rw = document.createElement('span'); rw.className = 'q-reward'; rw.textContent = o.done ? 'Obtenu' : o.reward;
+    top.appendChild(nm); top.appendChild(rw); body.appendChild(top);
+    if (o.desc) { var ds = document.createElement('span'); ds.className = 'q-desc'; ds.textContent = o.desc; body.appendChild(ds); }
+    var bar = document.createElement('div'); bar.className = 'prog'; var fill = document.createElement('i'); fill.style.width = Math.round(100 * Math.min(1, o.v / o.n)) + '%'; bar.appendChild(fill); body.appendChild(bar);
+    var num = document.createElement('span'); num.className = 'q-num'; num.textContent = Math.min(o.v, o.n).toLocaleString('fr-CH') + ' / ' + o.n.toLocaleString('fr-CH'); body.appendChild(num);
+    row.appendChild(md); row.appendChild(body); return row;
+  }
+  function renderQuests(){
+    ensureDaily();
+    var dbox = el('daily'); dbox.innerHTML = '';
+    S.daily.picks.forEach(function(pk){
+      var pr = dailyProgress(pk);
+      dbox.appendChild(questRow({ name: pr.text, reward: '+' + DAILY_COINS[pk.lvl] + ' pièces', v: pr.v, n: pr.goal, done: !!S.daily.done[pk.id] }));
+    });
+    var abox = el('achs'); abox.innerHTML = '';
+    var list = ACHS.slice().sort(function(a, b){ return (S.ach[a.id] ? 1 : 0) - (S.ach[b.id] ? 1 : 0); });
+    list.forEach(function(a){ abox.appendChild(questRow({ name:a.name, desc:a.desc, reward:rewardText(a), stone:a.stone, v:Math.floor(achValue(a)), n:a.n, done:!!S.ach[a.id] })); });
+    var got = ACHS.filter(function(a){ return S.ach[a.id]; }).length;
+    el('q-count').textContent = '· ' + got + ' / ' + ACHS.length;
+    var now = new Date(), mid = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1), hrs = Math.max(1, Math.round((mid - now) / 3600000));
+    el('q-reset').textContent = '· nouveaux dans ' + hrs + ' h';
+    el('q-coins').textContent = S.coins;
+  }
+  function openQuests(from){ returnTo = from; renderQuests(); show('quests'); }
+
+  // Événements
+  el('play').addEventListener('click', startGame);
+  el('again').addEventListener('click', startGame);
+  el('open-shop').addEventListener('click', function(){ openShop('menu'); });
+  el('open-quests').addEventListener('click', function(){ openQuests('menu'); });
+  el('over-quests').addEventListener('click', function(){ openQuests('over'); });
+  el('close-quests').addEventListener('click', function(){ updateHud(); show(returnTo); });
+  el('over-shop').addEventListener('click', function(){ openShop('over'); });
+  el('close-shop').addEventListener('click', function(){ updateHud(); if (returnTo === 'over') { el('revive-coins').disabled = run.revived || S.coins < 100; el('revive-ad').hidden = run.revived || S.pro; } show(returnTo); });
+  el('revive-coins').addEventListener('click', function(){ revive(true); });
+  el('revive-ad').addEventListener('click', function(){ revive(false); });
+  ['stones','lakes','packs'].forEach(function(k){ el('tab-' + k).addEventListener('click', function(){ tab = k; renderShop(); }); });
+  el('mute').addEventListener('click', function(e){ e.stopPropagation(); S.muted = !S.muted; save(); updateHud(); });
+  window.addEventListener('pointerdown', function(e){
+    if (e.target.closest('button, .panel, .card')) return;
+    e.preventDefault(); tap();
+  }, { passive:false });
+  window.addEventListener('keydown', function(e){ if ((e.code === 'Space' || e.code === 'Enter') && (mode === 'aim' || mode === 'fly')) { e.preventDefault(); tap(); } });
+
+  window.__ricochet = { get t(){ return t; }, get mode(){ return mode; }, get run(){ return run; }, tap: tap, S: S };
+  ensureDaily(); updateHud();
+  requestAnimationFrame(frame);
+  if ('serviceWorker' in navigator && location.protocol === 'https:') { try { navigator.serviceWorker.register('sw.js'); } catch(e) {} }
+})();
+</script>
+
+</body>
+</html>
